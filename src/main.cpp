@@ -1,6 +1,13 @@
+#include <matplot/freestanding/axes_functions.h>
+#include <matplot/freestanding/plot.h>
+#include <matplot/matplot.h>
+#include <matplot/util/keywords.h>
+
 #include <algorithm>
+#include <boost/math/tools/polynomial.hpp>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 
 #include "Eigen/Dense"
 #include "data/generator_polynomial.hpp"
@@ -38,7 +45,7 @@ int main()
       x_axis.begin(),
       x_axis.end(),
       [step = 0, &left_boundary, &right_boundary, &quantity_points]() mutable -> double
-      { return left_boundary + (step++) * (right_boundary - left_boundary) / static_cast<double>(quantity_points); });
+      { return left_boundary + (step++) * (right_boundary - left_boundary) / static_cast<double>(quantity_points - 1); });
   std::transform(
       x_axis.begin(),
       x_axis.end(),
@@ -54,6 +61,33 @@ int main()
   auto solution = linear_least_square(vandermonde, generated_data);
 
   std::cout << "solution:\n" << solution << "\n";
+
+  std::vector<double> solution_vector(solution.data(), solution.data() + solution.size());
+  boost::math::tools::polynomial<double> approx_poly(solution_vector);
+  std::vector<double> approx_data_vector;
+  approx_data_vector.reserve(quantity_points);
+  std::transform(
+      x_axis.begin(),
+      x_axis.end(),
+      std::back_inserter(approx_data_vector),
+      [&approx_poly](const double& x_point) { return approx_poly(x_point); });
+
+  std::vector<double> generated_data_vector(generated_data.data(), generated_data.data() + generated_data.size());
+
+  auto plot1 = matplot::plot(x_axis, generated_data_vector);
+  plot1->display_name("generated data");
+  plot1->line_width(5);
+  matplot::hold(matplot::on);
+
+  auto plot2 = matplot::plot(x_axis, approx_data_vector);
+  plot2->display_name("approximation of the data");
+  plot2->line_width(3);
+  matplot::hold(matplot::off);
+  
+  matplot::legend({});
+
+  matplot::show();
+  
 
   // std::ifstream fin_matrix;
   // fin_matrix.open("matrix.txt");
