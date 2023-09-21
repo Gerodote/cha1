@@ -1,0 +1,10 @@
+{
+  "name": "denisov-lab1-cha",
+  "version-string": "0.1",
+  "dependencies": [
+    "eigen3",
+    "matplotplusplus",
+    "simdjson",
+    "boost-math"
+  ]
+}
