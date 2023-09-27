@@ -1,5 +1,4 @@
 set(sources
-  src/generator_polynomial.cpp
 )
 
 set(exe_sources

@@ -2,11 +2,12 @@
   "generator": {
     "polynome_generator": {
       "order_polynome": 3,
-      "min_value_coefs": -7,
-      "max_value_coefs": 7
-    },
-    "left_boundary": 0,
-    "right_boundary": 10,
-    "quantity_points": 30
-  }
+      "min_value_coefs": -1,
+      "max_value_coefs": 1
+    }
+  },
+  "polynome_coefs": [-2, 4, -7, -3],
+  "left_boundary": 0,
+  "right_boundary": 10,
+  "quantity_points": 30
 }

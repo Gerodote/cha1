@@ -18,8 +18,9 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> linear_least_square(
     const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>& matrix,
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& vector)
 {
-  Eigen::MatrixXd pseudo_inverse = matrix.completeOrthogonalDecomposition().pseudoInverse();
-  return pseudo_inverse * vector;
+  auto smth = matrix.completeOrthogonalDecomposition();
+  // https://eigen.tuxfamily.org/dox/classEigen_1_1CompleteOrthogonalDecomposition.html#ab5e8b3f2c7b602772e1f1d7ce63d446e
+  return smth.solve(vector);
 }
 
 int main()
@@ -28,18 +29,39 @@ int main()
   simdjson::padded_string config_init_data_json = simdjson::padded_string::load("config_init_data.json");
   simdjson::ondemand::document config_init_data = parser.iterate(config_init_data_json);
 
-  auto order_polynome = static_cast<uint64_t>(config_init_data["generator"]["polynome_generator"]["order_polynome"]);
-  auto min_value_coefs = static_cast<double>(config_init_data["generator"]["polynome_generator"]["min_value_coefs"]);
-  auto max_value_coefs = static_cast<double>(config_init_data["generator"]["polynome_generator"]["max_value_coefs"]);
-
-  data::DataGeneratorPolynome polynomial_data_generator(order_polynome, min_value_coefs, max_value_coefs);
-
-  auto left_boundary = static_cast<double>(config_init_data["generator"]["left_boundary"]);
-  auto right_boundary = static_cast<double>(config_init_data["generator"]["right_boundary"]);
-  auto quantity_points = static_cast<uint64_t>(config_init_data["generator"]["quantity_points"]);
+  auto left_boundary = static_cast<double>(config_init_data["left_boundary"]);
+  auto right_boundary = static_cast<double>(config_init_data["right_boundary"]);
+  auto quantity_points = static_cast<uint64_t>(config_init_data["quantity_points"]);
 
   Eigen::Matrix<double, 1, Eigen::Dynamic> x_axis(quantity_points);
   Eigen::Matrix<double, Eigen::Dynamic, 1> generated_data(quantity_points);
+
+  uint64_t order_polynome;
+  boost::math::tools::polynomial<double> polynome;
+  simdjson::ondemand::array json_array_of_coefs;
+  auto error = config_init_data["polynome_coefs"].get(json_array_of_coefs);
+  if (error != simdjson::SUCCESS)
+  {
+    auto order_polynome_to_create = static_cast<uint64_t>(config_init_data["generator"]["polynome_generator"]["order_polynome"]);
+    auto min_value_coefs = static_cast<double>(config_init_data["generator"]["polynome_generator"]["min_value_coefs"]);
+    auto max_value_coefs = static_cast<double>(config_init_data["generator"]["polynome_generator"]["max_value_coefs"]);
+
+    data::GeneratorPolynome<double> polynomial_data_generator(order_polynome_to_create, min_value_coefs, max_value_coefs);
+
+    polynome = boost::math::tools::polynomial<double>(polynomial_data_generator());
+  }
+  else
+  {
+    std::vector<double> poly_coefs;
+    
+    for (auto&& val : json_array_of_coefs)
+    {
+      poly_coefs.push_back(val);
+    }
+
+    polynome = boost::math::tools::polynomial<double>(poly_coefs);
+  }
+  order_polynome = polynome.degree();
 
   std::generate(
       x_axis.begin(),
@@ -50,9 +72,9 @@ int main()
       x_axis.begin(),
       x_axis.end(),
       generated_data.begin(),
-      [&polynomial_data_generator](const double& x_point) { return polynomial_data_generator(x_point); });
+      [&polynome](const double& x_point) { return polynome(x_point); });
   std::cout << "x-axis:\n" << x_axis << '\n';
-  std::cout << "polynome coefs:\n" << polynomial_data_generator << '\n';
+  std::cout << "polynome coefs:\n" << polynome << '\n';
   std::cout << "generated data:\n" << generated_data.transpose() << '\n';
 
   auto vandermonde = create_vandermonde_matrix<double>(x_axis, order_polynome + 1);
@@ -72,6 +94,12 @@ int main()
       std::back_inserter(approx_data_vector),
       [&approx_poly](const double& x_point) { return approx_poly(x_point); });
 
+  std::cout << "\napprox_data_vector:\n";
+  for (const auto& val : approx_data_vector)
+  {
+    std::cout << val << ' ';
+  }
+  std::cout << "\n";
   std::vector<double> generated_data_vector(generated_data.data(), generated_data.data() + generated_data.size());
 
   auto plot1 = matplot::plot(x_axis, generated_data_vector);
@@ -83,62 +111,8 @@ int main()
   plot2->display_name("approximation of the data");
   plot2->line_width(3);
   matplot::hold(matplot::off);
-  
+
   matplot::legend({});
 
   matplot::show();
-  
-
-  // std::ifstream fin_matrix;
-  // fin_matrix.open("matrix.txt");
-  // uint64_t rows = 0;
-  // uint64_t cols = 0;
-  // fin_matrix >> rows >> cols;
-  // Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> matrix_to_solve(rows, cols);
-  // double a_value = 0;
-  // for (uint64_t row = 0; row < rows; ++row)
-  // {
-  //   for (uint64_t col = 0; col < cols; ++col)
-  //   {
-  //     fin_matrix >> a_value;
-  //     matrix_to_solve(static_cast<Eigen::Index>(row), static_cast<Eigen::Index>(col)) = a_value;
-  //   }
-  // }
-  //
-  // std::cout << "matrix_to_solve:\n" << matrix_to_solve << '\n';
-  //
-  // std::ifstream fin_vector;
-  // fin_vector.open("vector.txt");
-  //
-  // Eigen::Matrix<double,Eigen::Dynamic,1,0,Eigen::Dynamic,1> a_vector(rows);
-  //
-  // for (auto& row : a_vector)
-  // {
-  //   fin_vector >> row;
-  // }
-  //
-  // std::cout << "vector b:\n" << a_vector << '\n';
-  //
-  // Eigen::MatrixXd pseudo_inverse_of_matrix_to_solve = matrix_to_solve.completeOrthogonalDecomposition().pseudoInverse();
-  //
-  // std::cout << "pseudo_inverse_of_matrix_to_solve:\n" << pseudo_inverse_of_matrix_to_solve << '\n';
-  //
-  // std::cout << "Checking if the only solution exists:\n";
-  //
-  // auto maybe_a_solution = pseudo_inverse_of_matrix_to_solve * a_vector;
-  // std::cout << "A*(A^+)*b = \n" <<  matrix_to_solve * pseudo_inverse_of_matrix_to_solve * a_vector << "\n";
-  // if ((matrix_to_solve * pseudo_inverse_of_matrix_to_solve * a_vector).isApprox(a_vector))
-  // {
-  //   std::cout << "yes\nSolution is:\n" << maybe_a_solution << '\n';
-  // }
-  // else
-  // {
-  //   std::cout << "no\nSet of solution can be described as:\n" << maybe_a_solution << "\n+\n" <<
-  //   Eigen::MatrixXd::Identity(static_cast<Eigen::Index>(rows),static_cast<Eigen::Index>(rows)) - matrix_to_solve *
-  //   pseudo_inverse_of_matrix_to_solve << " * any_vector_appropriate_size\n";
-  //
-  // }
-  //
-  // fin_matrix.close();
-  // fin_vector.close();
 }
